@@ -1,1 +1,17 @@
+gst-bs2b
+========
 
+This uses the bs2b library, created by Boris Mikhaylov
+http://bs2b.sourceforge.net/
+
+Settings:
+ - frequency cut (Hz) -> fcut=300..2000
+ - feed level (db) -> feed=1.0..15.0
+
+Presets:
+ - DEFAULT: preset=0 <=> fcut=700 / feed=4.5 (This is the overal default)
+ - CMOY: preset=1 <=> fcut=700 / feed=6.0
+ - JMEIER: preset=2 <=> fcut=650 / feed=9.5
+
+Example pipeline:
+ gst-launch -v filesrc location=a.mp3 ! mad ! crossfeed preset=1 ! autoaudiosink

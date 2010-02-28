@@ -34,7 +34,7 @@
 /**
  * SECTION:element-crossfeed
  *
- * Improve headphone listening of stereo audio records using the bs2b library
+ * Improve headphone listening of stereo audio records using the bs2b library.
  *
  * <refsect2>
  * <title>Example pipelines</title>
@@ -312,9 +312,9 @@ GST_PLUGIN_DEFINE (
     GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
     "crossfeed",
-    "Improve headphone listening of stereo audio records",
+    "Improve headphone listening of stereo audio records using the bs2b library.",
     plugin_init,
     VERSION, "LGPL",
-    "GStreamer",
-    "http://gstreamer.net/"
+    "gstreamer0.10-bs2b",
+    "http://bitbucket.org/lazka/gst-bs2b/"
 );
