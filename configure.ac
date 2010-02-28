@@ -51,6 +51,7 @@ fi
 dnl Now we're ready to ask for gstreamer libs and cflags
 dnl And we can also ask for the right version of gstreamer
 
+PKG_CHECK_MODULES(BS2B, libbs2b >= 3.1.0)
 
 PKG_CHECK_MODULES(GST, \
   gstreamer-$GST_MAJORMINOR >= $GST_REQUIRED,
@@ -78,7 +79,7 @@ PKG_CHECK_MODULES(GST_BASE, gstreamer-base-$GST_MAJORMINOR >= $GST_REQUIRED,
 dnl Give a warning if we don't have gstreamer libs
 dnl you can turn this into an error if you need them
 if test "x$HAVE_GST_BASE" = "xno"; then
-  AC_MSG_NOTICE(no GStreamer base class libraries found (gstreamer-base-$GST_MAJORMINOR))
+  AC_MSG_ERROR(no GStreamer base class libraries found (gstreamer-base-$GST_MAJORMINOR))
 fi
 
 dnl make _CFLAGS and _LIBS available
@@ -93,7 +94,7 @@ PKG_CHECK_MODULES(GSTPB_BASE,
 dnl Give a warning if we don't have gstreamer libs
 dnl you can turn this into an error if you need them
 if test "x$HAVE_GSTPB_BASE" = "xno"; then
-  AC_MSG_NOTICE(no GStreamer Plugins Base libraries found (gstreamer-plugins-base-$GST_MAJORMINOR))
+  AC_MSG_ERROR(no GStreamer Plugins Base libraries found (gstreamer-plugins-base-$GST_MAJORMINOR))
 fi
 
 dnl make _CFLAGS and _LIBS available
