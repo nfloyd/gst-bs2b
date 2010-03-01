@@ -202,7 +202,7 @@ gst_crossfeed_setcaps (GstBaseTransform * trans, GstCaps * incaps, GstCaps * out
 
   gst_structure_get_boolean (s, "signed", &crossfeed->sign);
 
-  printf("---------------------\n");
+  /*printf("---------------------\n");
   printf("mime:       %s\n", mimetype);
   printf("rate:       %d\n", crossfeed->samplerate);
   printf("width:      %d\n", crossfeed->width);
@@ -210,7 +210,7 @@ gst_crossfeed_setcaps (GstBaseTransform * trans, GstCaps * incaps, GstCaps * out
   printf("li. endian: %d\n", crossfeed->little_endian);
   printf("end. nativ: %d\n", BYTE_ORDER);
   printf("signed:     %d\n", crossfeed->sign);
-  printf("---------------------\n");
+  printf("---------------------\n");*/
 
   return TRUE;
 }
