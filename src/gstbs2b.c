@@ -48,6 +48,8 @@
 #include "config.h"
 #endif
 
+#include <string.h>
+
 #include <gst/gst.h>
 #include <gst/audio/audio.h>
 #include <gst/audio/gstaudiofilter.h>
@@ -75,22 +77,64 @@ struct _GstCrossfeed {
   guint32 level;
   gint fcut;
   gint feed;
+
   gint samplerate;
+  gboolean is_int;
+  gboolean little_endian;
+  gint width;
+  gint depth;
+  gboolean sign;
 };
 
 struct _GstCrossfeedClass {
   GstAudioFilterClass parent_class;
 };
 
+static const GstElementDetails crossfeed_details = GST_ELEMENT_DETAILS (
+    "Crossfeed effect",
+    "Filter/Effect/Audio",
+    "Improve headphone listening of stereo audio records",
+    "Christoph Reiter <christoph.reiter@gmx.at>");
 
-#define ALLOWED_CAPS \
-    "audio/x-raw-int,"                                                \
-    " depth = (int) 16, "                                             \
-    " width = (int) 16, "                                             \
-    " endianness = (int) BYTE_ORDER,"                                 \
-    " rate = (int) [ 1, MAX ],"                                       \
-    " channels = (int) 2, "                                           \
-    " signed = (boolean) TRUE"
+static GstStaticPadTemplate sink_template_factory =
+  GST_STATIC_PAD_TEMPLATE ("sink",
+    GST_PAD_SINK,
+    GST_PAD_ALWAYS,
+    GST_STATIC_CAPS (
+      "audio/x-raw-int, "
+      "rate = (int) [ 1, MAX ], "
+      "channels = (int) 2, "
+      "endianness = (int) { 1234, 4321 }, "
+      "width = (int) { 8, 16, 32 }, "
+      "depth = (int) { 8, 16, 32 }, "
+      "signed = (boolean) { true, false }; "
+
+      "audio/x-raw-float, "
+      "rate = (int) [ 1, MAX ], "
+      "channels = (int) 2, "
+      "endianness = (int) { 1234, 4321 }, "
+      "width = (int) {32, 64} ")
+  );
+
+static GstStaticPadTemplate src_template_factory =
+  GST_STATIC_PAD_TEMPLATE ("src",
+    GST_PAD_SRC,
+    GST_PAD_ALWAYS,
+    GST_STATIC_CAPS (
+      "audio/x-raw-int, "
+      "rate = (int) [ 1, MAX ], "
+      "channels = (int) 2, "
+      "endianness = (int) { 1234, 4321 }, "
+      "width = (int) { 8, 16, 32 }, "
+      "depth = (int) { 8, 16, 32 }, "
+      "signed = (boolean) { true, false }; "
+
+      "audio/x-raw-float, "
+      "rate = (int) [ 1, MAX ], "
+      "channels = (int) 2, "
+      "endianness = (int) { 1234, 4321 }, "
+      "width = (int) {32, 64} ")
+  );
 
 enum
 {
@@ -134,9 +178,39 @@ gst_crossfeed_setcaps (GstBaseTransform * trans, GstCaps * incaps, GstCaps * out
 {
   GstCrossfeed *crossfeed = GST_CROSSFEED(trans);
   GstStructure *s = gst_caps_get_structure (incaps, 0);
+  const gchar *mimetype;
+  gint endianness;
+
+  mimetype = gst_structure_get_name(s);
+  if (strcmp (mimetype, "audio/x-raw-int") == 0)
+    crossfeed->is_int = TRUE;
+  else
+    crossfeed->is_int = FALSE;
 
   gst_structure_get_int (s, "rate", &crossfeed->samplerate);
   bs2b_set_srate(_bs2bdp, crossfeed->samplerate);
+
+  gst_structure_get_int (s, "endianness", &endianness);
+  if ( endianness == 1234)
+    crossfeed->little_endian = TRUE;
+  else
+    crossfeed->little_endian = FALSE;
+
+  gst_structure_get_int (s, "width", &crossfeed->width);
+
+  gst_structure_get_int (s, "depth", &crossfeed->depth);
+
+  gst_structure_get_boolean (s, "signed", &crossfeed->sign);
+
+  printf("---------------------\n");
+  printf("mime:       %s\n", mimetype);
+  printf("rate:       %d\n", crossfeed->samplerate);
+  printf("width:      %d\n", crossfeed->width);
+  printf("depth:      %d\n", crossfeed->depth);
+  printf("li. endian: %d\n", crossfeed->little_endian);
+  printf("end. nativ: %d\n", BYTE_ORDER);
+  printf("signed:     %d\n", crossfeed->sign);
+  printf("---------------------\n");
 
   return TRUE;
 }
@@ -144,19 +218,14 @@ gst_crossfeed_setcaps (GstBaseTransform * trans, GstCaps * incaps, GstCaps * out
 static void
 gst_crossfeed_base_init (gpointer g_class)
 {
-  GstAudioFilterClass *audiofilter_class = GST_AUDIO_FILTER_CLASS (g_class);
   GstElementClass *element_class = GST_ELEMENT_CLASS (g_class);
-  GstCaps *caps;
 
-  gst_element_class_set_details_simple (element_class,
-    "Crossfeed effect",
-    "Filter/Effect/Audio",
-    "Improve headphone listening of stereo audio records",
-    "Christoph Reiter <christoph.reiter@gmx.at>");
+  gst_element_class_add_pad_template (element_class,
+      gst_static_pad_template_get (&sink_template_factory));
+  gst_element_class_add_pad_template (element_class,
+      gst_static_pad_template_get (&src_template_factory));
 
-  caps = gst_caps_from_string (ALLOWED_CAPS);
-  gst_audio_filter_class_add_pad_templates (audiofilter_class, caps);
-  gst_caps_unref (caps);
+  gst_element_class_set_details (element_class, &crossfeed_details);
 }
 
 static void
@@ -205,11 +274,71 @@ static GstFlowReturn
 gst_crossfeed_transform_inplace (GstBaseTransform * base, GstBuffer * outbuf)
 {
   GstCrossfeed *crossfeed = GST_CROSSFEED (base);
-  gint16 *data = (gint16 *) GST_BUFFER_DATA (outbuf);
-  gint samples = GST_BUFFER_SIZE (outbuf) / 4;
+  void *data = GST_BUFFER_DATA (outbuf);
+  gint samples = GST_BUFFER_SIZE (outbuf);
 
   if (crossfeed->active) {
-    bs2b_cross_feed_s16 (_bs2bdp, data, samples);
+    if (crossfeed->is_int)
+    {
+      if (crossfeed->width == 8)
+      {
+        if (crossfeed->sign)
+          bs2b_cross_feed_s8 (_bs2bdp, (gint8 *) data, samples/2);
+        else
+          bs2b_cross_feed_u8 (_bs2bdp, (guint8 *) data, samples/2);
+      }
+      else if (crossfeed->width == 16)
+      {
+        if (crossfeed->little_endian)
+        {
+          if (crossfeed->sign)
+            bs2b_cross_feed_s16le (_bs2bdp, (gint16 *) data, samples/4);
+          else
+            bs2b_cross_feed_u16le (_bs2bdp, (guint16 *) data, samples/4);
+        }
+        else
+        {
+          if (crossfeed->sign)
+            bs2b_cross_feed_s16be (_bs2bdp, (gint16 *) data, samples/4);
+          else
+            bs2b_cross_feed_u16be (_bs2bdp, (guint16 *) data, samples/4);
+        }
+      }
+      else if (crossfeed->width == 32)
+      {
+        if (crossfeed->little_endian)
+        {
+          if (crossfeed->sign)
+            bs2b_cross_feed_s32le (_bs2bdp, (gint32 *) data, samples/8);
+          else
+            bs2b_cross_feed_u32le (_bs2bdp, (guint32 *) data, samples/8);
+        }
+        else
+        {
+          if (crossfeed->sign)
+            bs2b_cross_feed_s32be (_bs2bdp, (gint32 *) data, samples/8);
+          else
+            bs2b_cross_feed_u32be (_bs2bdp, (guint32 *) data, samples/8);
+        }
+      }
+    }
+    else
+    {
+      if (crossfeed->width == 32)
+      {
+        if (crossfeed->little_endian)
+          bs2b_cross_feed_fle (_bs2bdp, (gfloat *) data, samples/8);
+        else
+          bs2b_cross_feed_fbe (_bs2bdp, (gfloat *) data, samples/8);
+      }
+      else if (crossfeed->width == 64)
+      {
+        if (crossfeed->little_endian)
+          bs2b_cross_feed_dle (_bs2bdp, (gdouble *) data, samples/16);
+        else
+          bs2b_cross_feed_dbe (_bs2bdp, (gdouble *) data, samples/16);
+      }
+    }
   }
 
   return GST_FLOW_OK;
