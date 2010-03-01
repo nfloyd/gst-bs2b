@@ -19,8 +19,8 @@ libgstbs2b_la_SOURCES = gstbs2b.c
 # flags used to compile this plugin
 # add other _CFLAGS and _LIBS as needed
 libgstbs2b_la_CFLAGS = $(GST_CFLAGS)
-libgstbs2b_la_LIBADD = $(GST_LIBS) $(GST_BASE_LIBS) $(GSTCTRL_LIBS) -lgstaudio-$(GST_MAJORMINOR)
-libgstbs2b_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS) -lbs2b
+libgstbs2b_la_LIBADD = $(GST_LIBS) $(GST_BASE_LIBS) $(BS2B_LIBS) -lgstaudio-$(GST_MAJORMINOR)
+libgstbs2b_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
 libgstbs2b_la_LIBTOOLFLAGS = --tag=disable-static
 
 # headers we need but don't want installed
