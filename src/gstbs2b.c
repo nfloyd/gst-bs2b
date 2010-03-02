@@ -102,7 +102,7 @@ static GstStaticPadTemplate sink_template_factory =
     GST_PAD_ALWAYS,
     GST_STATIC_CAPS (
       "audio/x-raw-int, "
-      "rate = (int) [ 1, MAX ], "
+      "rate = (int) [ " G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE) " ], "
       "channels = (int) 2, "
       "endianness = (int) { 1234, 4321 }, "
       "width = (int) { 8, 16, 32 }, "
@@ -110,7 +110,7 @@ static GstStaticPadTemplate sink_template_factory =
       "signed = (boolean) { true, false }; "
 
       "audio/x-raw-float, "
-      "rate = (int) [ 1, MAX ], "
+      "rate = (int) [ " G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE) " ], "
       "channels = (int) 2, "
       "endianness = (int) { 1234, 4321 }, "
       "width = (int) {32, 64} ")
@@ -122,7 +122,7 @@ static GstStaticPadTemplate src_template_factory =
     GST_PAD_ALWAYS,
     GST_STATIC_CAPS (
       "audio/x-raw-int, "
-      "rate = (int) [ 1, MAX ], "
+      "rate = (int) [ " G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE) " ], "
       "channels = (int) 2, "
       "endianness = (int) { 1234, 4321 }, "
       "width = (int) { 8, 16, 32 }, "
@@ -130,7 +130,7 @@ static GstStaticPadTemplate src_template_factory =
       "signed = (boolean) { true, false }; "
 
       "audio/x-raw-float, "
-      "rate = (int) [ 1, MAX ], "
+      "rate = (int) [ " G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE) " ], "
       "channels = (int) 2, "
       "endianness = (int) { 1234, 4321 }, "
       "width = (int) {32, 64} ")
