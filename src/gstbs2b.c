@@ -22,6 +22,7 @@
 /* This uses the bs2b library, created by Boris Mikhaylov
  * http://bs2b.sourceforge.net/
  *
+ * activate -> active=True (default)
  * frequency cut (Hz) -> fcut=300..2000
  * feed level (db) -> feed=1.0..15.0
  *
@@ -39,7 +40,7 @@
  * <refsect2>
  * <title>Example pipelines</title>
  * |[
- * gst-launch -v filesrc location=sine.ogg ! oggdemux ! vorbisdec ! audioconvert ! crossfeed ! audioconvert ! audioresample ! alsasink
+ * gst-launch -v filesrc location=sine.ogg ! oggdemux ! vorbisdec ! audioconvert ! crossfeed ! alsasink
  * ]| Play an Ogg/Vorbis file.
  * </refsect2>
  */
@@ -84,6 +85,10 @@ struct _GstCrossfeed {
   gint width;
   gint depth;
   gboolean sign;
+
+  t_bs2bdp bs2bdp;
+  void (*func) ();
+  gint divider;
 };
 
 struct _GstCrossfeedClass {
@@ -91,30 +96,35 @@ struct _GstCrossfeedClass {
 };
 
 static const GstElementDetails crossfeed_details = GST_ELEMENT_DETAILS (
-    "Crossfeed effect",
-    "Filter/Effect/Audio",
-    "Improve headphone listening of stereo audio records",
-    "Christoph Reiter <christoph.reiter@gmx.at>");
+  "Crossfeed effect",
+  "Filter/Effect/Audio",
+  "Improve headphone listening of stereo audio records"
+      "using the bs2b library.",
+  "Christoph Reiter <christoph.reiter@gmx.at>");
 
 static GstStaticPadTemplate sink_template_factory =
-  GST_STATIC_PAD_TEMPLATE ("sink",
-    GST_PAD_SINK,
-    GST_PAD_ALWAYS,
-    GST_STATIC_CAPS (
-      "audio/x-raw-int, "
-      "rate = (int) [ " G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE) " ], "
-      "channels = (int) 2, "
-      "endianness = (int) { 1234, 4321 }, "
-      "width = (int) { 8, 16, 32 }, "
-      "depth = (int) { 8, 16, 32 }, "
-      "signed = (boolean) { true, false }; "
+    GST_STATIC_PAD_TEMPLATE ("sink",
+        GST_PAD_SINK,
+        GST_PAD_ALWAYS,
+        GST_STATIC_CAPS (
+            "audio/x-raw-int, "
+            "rate = (int) [ "
+                G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE)
+            " ], "
+            "channels = (int) 2, "
+            "endianness = (int) { 1234, 4321 }, "
+            "width = (int) { 8, 16, 32 }, "
+            "depth = (int) { 8, 16, 32 }, "
+            "signed = (boolean) { true, false }; "
 
-      "audio/x-raw-float, "
-      "rate = (int) [ " G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE) " ], "
-      "channels = (int) 2, "
-      "endianness = (int) { 1234, 4321 }, "
-      "width = (int) {32, 64} ")
-  );
+            "audio/x-raw-float, "
+            "rate = (int) [ "
+                G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE)
+            " ], "
+            "channels = (int) 2, "
+            "endianness = (int) { 1234, 4321 }, "
+            "width = (int) {32, 64} ")
+    );
 
 static GstStaticPadTemplate src_template_factory =
   GST_STATIC_PAD_TEMPLATE ("src",
@@ -122,7 +132,9 @@ static GstStaticPadTemplate src_template_factory =
     GST_PAD_ALWAYS,
     GST_STATIC_CAPS (
       "audio/x-raw-int, "
-      "rate = (int) [ " G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE) " ], "
+      "rate = (int) [ "
+          G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE)
+      " ], "
       "channels = (int) 2, "
       "endianness = (int) { 1234, 4321 }, "
       "width = (int) { 8, 16, 32 }, "
@@ -130,16 +142,13 @@ static GstStaticPadTemplate src_template_factory =
       "signed = (boolean) { true, false }; "
 
       "audio/x-raw-float, "
-      "rate = (int) [ " G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE) " ], "
+      "rate = (int) [ "
+          G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE)
+      " ], "
       "channels = (int) 2, "
       "endianness = (int) { 1234, 4321 }, "
       "width = (int) {32, 64} ")
   );
-
-enum
-{
-  LAST_SIGNAL
-};
 
 enum
 {
@@ -158,10 +167,9 @@ enum
   PRESET_NONE
 };
 
-#define DEFAULT_FCUT ((BS2B_DEFAULT_CLEVEL) & 0xFFFF)
-#define DEFAULT_FEED ((BS2B_DEFAULT_CLEVEL) >> 16)
-
-t_bs2bdp _bs2bdp = NULL;
+#define DEFAULT_FCUT (BS2B_DEFAULT_CLEVEL & 0xFFFF)
+#define DEFAULT_FEED (BS2B_DEFAULT_CLEVEL >> 16)
+#define FEED_FACTOR 10.0
 
 static void gst_crossfeed_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
@@ -171,30 +179,24 @@ static void gst_crossfeed_get_property (GObject * object, guint prop_id,
 static GstFlowReturn gst_crossfeed_transform_inplace (GstBaseTransform * base,
     GstBuffer * outbuf);
 
-GST_BOILERPLATE (GstCrossfeed, gst_crossfeed, GstAudioFilter, GST_TYPE_AUDIO_FILTER);
+static void set_bs2b_filter_function (GstCrossfeed *crossfeed);
+
+GST_BOILERPLATE (GstCrossfeed, gst_crossfeed, GstAudioFilter,
+    GST_TYPE_AUDIO_FILTER);
 
 static gboolean
-gst_crossfeed_setcaps (GstBaseTransform * trans, GstCaps * incaps, GstCaps * outcaps)
+gst_crossfeed_setcaps (GstBaseTransform * trans, GstCaps * in, GstCaps * out)
 {
   GstCrossfeed *crossfeed = GST_CROSSFEED(trans);
-  GstStructure *s = gst_caps_get_structure (incaps, 0);
-  const gchar *mimetype;
-  gint endianness;
+  GstStructure *s = gst_caps_get_structure (in, 0);
 
-  mimetype = gst_structure_get_name(s);
-  if (strcmp (mimetype, "audio/x-raw-int") == 0)
-    crossfeed->is_int = TRUE;
-  else
-    crossfeed->is_int = FALSE;
+  crossfeed->is_int = !strcmp (gst_structure_get_name (s), "audio/x-raw-int");
 
   gst_structure_get_int (s, "rate", &crossfeed->samplerate);
-  bs2b_set_srate(_bs2bdp, crossfeed->samplerate);
+  bs2b_set_srate (crossfeed->bs2bdp, crossfeed->samplerate);
 
-  gst_structure_get_int (s, "endianness", &endianness);
-  if ( endianness == 1234)
-    crossfeed->little_endian = TRUE;
-  else
-    crossfeed->little_endian = FALSE;
+  crossfeed->little_endian =
+      (g_value_get_int (gst_structure_get_value (s, "endianness")) == 1234);
 
   gst_structure_get_int (s, "width", &crossfeed->width);
 
@@ -202,15 +204,7 @@ gst_crossfeed_setcaps (GstBaseTransform * trans, GstCaps * incaps, GstCaps * out
 
   gst_structure_get_boolean (s, "signed", &crossfeed->sign);
 
-  /*printf("---------------------\n");
-  printf("mime:       %s\n", mimetype);
-  printf("rate:       %d\n", crossfeed->samplerate);
-  printf("width:      %d\n", crossfeed->width);
-  printf("depth:      %d\n", crossfeed->depth);
-  printf("li. endian: %d\n", crossfeed->little_endian);
-  printf("end. nativ: %d\n", BYTE_ORDER);
-  printf("signed:     %d\n", crossfeed->sign);
-  printf("---------------------\n");*/
+  set_bs2b_filter_function (crossfeed);
 
   return TRUE;
 }
@@ -248,15 +242,19 @@ gst_crossfeed_class_init (GstCrossfeedClass * klass)
 
   g_object_class_install_property (gobject_class, ARG_FCUT,
       g_param_spec_int ("fcut", "fcut", "fcut",
-          BS2B_MINFCUT, BS2B_MAXFCUT, DEFAULT_FCUT, G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
+          BS2B_MINFCUT, BS2B_MAXFCUT, DEFAULT_FCUT,
+          G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
 
   g_object_class_install_property (gobject_class, ARG_FEED,
       g_param_spec_float ("feed", "feed", "feed",
-          BS2B_MINFEED/10.0, BS2B_MAXFEED/10.0, DEFAULT_FEED/10.0, G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
+          BS2B_MINFEED / FEED_FACTOR, BS2B_MAXFEED / FEED_FACTOR,
+          DEFAULT_FEED / FEED_FACTOR,
+          G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
 
   g_object_class_install_property (gobject_class, ARG_PRESET,
       g_param_spec_int ("preset", "preset", "preset",
-          0, 2, PRESET_DEFAULT, G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
+          PRESET_DEFAULT, PRESET_JMEIER, PRESET_DEFAULT,
+          G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
 
   trans_class->transform_ip = gst_crossfeed_transform_inplace;
   trans_class->set_caps = gst_crossfeed_setcaps;
@@ -265,8 +263,7 @@ gst_crossfeed_class_init (GstCrossfeedClass * klass)
 static void
 gst_crossfeed_init (GstCrossfeed * crossfeed, GstCrossfeedClass * klass)
 {
-  _bs2bdp = bs2b_open ();
-
+  crossfeed->bs2bdp = bs2b_open ();
   crossfeed->active = TRUE;
 }
 
@@ -277,76 +274,15 @@ gst_crossfeed_transform_inplace (GstBaseTransform * base, GstBuffer * outbuf)
   void *data = GST_BUFFER_DATA (outbuf);
   gint samples = GST_BUFFER_SIZE (outbuf);
 
-  if (crossfeed->active) {
-    if (crossfeed->is_int)
-    {
-      if (crossfeed->width == 8)
-      {
-        if (crossfeed->sign)
-          bs2b_cross_feed_s8 (_bs2bdp, (gint8 *) data, samples/2);
-        else
-          bs2b_cross_feed_u8 (_bs2bdp, (guint8 *) data, samples/2);
-      }
-      else if (crossfeed->width == 16)
-      {
-        if (crossfeed->little_endian)
-        {
-          if (crossfeed->sign)
-            bs2b_cross_feed_s16le (_bs2bdp, (gint16 *) data, samples/4);
-          else
-            bs2b_cross_feed_u16le (_bs2bdp, (guint16 *) data, samples/4);
-        }
-        else
-        {
-          if (crossfeed->sign)
-            bs2b_cross_feed_s16be (_bs2bdp, (gint16 *) data, samples/4);
-          else
-            bs2b_cross_feed_u16be (_bs2bdp, (guint16 *) data, samples/4);
-        }
-      }
-      else if (crossfeed->width == 32)
-      {
-        if (crossfeed->little_endian)
-        {
-          if (crossfeed->sign)
-            bs2b_cross_feed_s32le (_bs2bdp, (gint32 *) data, samples/8);
-          else
-            bs2b_cross_feed_u32le (_bs2bdp, (guint32 *) data, samples/8);
-        }
-        else
-        {
-          if (crossfeed->sign)
-            bs2b_cross_feed_s32be (_bs2bdp, (gint32 *) data, samples/8);
-          else
-            bs2b_cross_feed_u32be (_bs2bdp, (guint32 *) data, samples/8);
-        }
-      }
-    }
-    else
-    {
-      if (crossfeed->width == 32)
-      {
-        if (crossfeed->little_endian)
-          bs2b_cross_feed_fle (_bs2bdp, (gfloat *) data, samples/8);
-        else
-          bs2b_cross_feed_fbe (_bs2bdp, (gfloat *) data, samples/8);
-      }
-      else if (crossfeed->width == 64)
-      {
-        if (crossfeed->little_endian)
-          bs2b_cross_feed_dle (_bs2bdp, (gdouble *) data, samples/16);
-        else
-          bs2b_cross_feed_dbe (_bs2bdp, (gdouble *) data, samples/16);
-      }
-    }
-  }
+  if (G_LIKELY (crossfeed->func != NULL) && crossfeed->active)
+    crossfeed->func (crossfeed->bs2bdp, data, samples / crossfeed->divider);
 
   return GST_FLOW_OK;
 }
 
 static void
-gst_crossfeed_set_property (GObject * object, guint prop_id, const GValue * value,
-    GParamSpec * pspec)
+gst_crossfeed_set_property (GObject * object, guint prop_id,
+    const GValue * value, GParamSpec * pspec)
 {
   GstCrossfeed *crossfeed;
 
@@ -359,24 +295,24 @@ gst_crossfeed_set_property (GObject * object, guint prop_id, const GValue * valu
       break;
     case ARG_FCUT:
       crossfeed->fcut = g_value_get_int (value);
-      bs2b_set_level_fcut (_bs2bdp, crossfeed->fcut);
-      crossfeed->level = bs2b_get_level (_bs2bdp);
+      bs2b_set_level_fcut (crossfeed->bs2bdp, crossfeed->fcut);
+      crossfeed->level = bs2b_get_level (crossfeed->bs2bdp);
       break;
     case ARG_FEED:
-      crossfeed->feed = (gint) (g_value_get_float (value) * 10);
-      bs2b_set_level_feed (_bs2bdp, crossfeed->feed);
-      crossfeed->level = bs2b_get_level (_bs2bdp);
+      crossfeed->feed = (gint) (g_value_get_float (value) * FEED_FACTOR);
+      bs2b_set_level_feed (crossfeed->bs2bdp, crossfeed->feed);
+      crossfeed->level = bs2b_get_level (crossfeed->bs2bdp);
       break;
     case ARG_PRESET:
       switch (g_value_get_int (value)) {
         case PRESET_DEFAULT:
-          bs2b_set_level (_bs2bdp, BS2B_DEFAULT_CLEVEL);
+          bs2b_set_level (crossfeed->bs2bdp, BS2B_DEFAULT_CLEVEL);
           break;
         case PRESET_CMOY:
-          bs2b_set_level (_bs2bdp, BS2B_CMOY_CLEVEL);
+          bs2b_set_level (crossfeed->bs2bdp, BS2B_CMOY_CLEVEL);
           break;
         case PRESET_JMEIER:
-          bs2b_set_level (_bs2bdp, BS2B_JMEIER_CLEVEL);
+          bs2b_set_level (crossfeed->bs2bdp, BS2B_JMEIER_CLEVEL);
           break;
         default:
           G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -406,7 +342,7 @@ gst_crossfeed_get_property (GObject * object, guint prop_id, GValue * value,
       g_value_set_int (value, crossfeed->fcut);
       break;
     case ARG_FEED:
-      g_value_set_float (value, ((gfloat)crossfeed->feed) / 10);
+      g_value_set_float (value, (crossfeed->feed / FEED_FACTOR));
       break;
     case ARG_PRESET:
       switch (crossfeed->level) {
@@ -430,6 +366,63 @@ gst_crossfeed_get_property (GObject * object, guint prop_id, GValue * value,
   }
 }
 
+static void
+set_bs2b_filter_function (GstCrossfeed *crossfeed)
+{
+  crossfeed->divider = crossfeed->width / 4;
+
+  if (crossfeed->is_int) {
+    if (crossfeed->width == 8) {
+      if (crossfeed->sign)
+        crossfeed->func = &bs2b_cross_feed_s8;
+      else
+        crossfeed->func = &bs2b_cross_feed_u8;
+    }
+    else if (crossfeed->width == 16) {
+      if (crossfeed->little_endian) {
+        if (crossfeed->sign)
+          crossfeed->func = &bs2b_cross_feed_s16le;
+        else
+          crossfeed->func = &bs2b_cross_feed_u16le;
+      }
+      else {
+        if (crossfeed->sign)
+          crossfeed->func = &bs2b_cross_feed_s16be;
+        else
+          crossfeed->func = &bs2b_cross_feed_u16be;
+      }
+    }
+    else if (crossfeed->width == 32) {
+      if (crossfeed->little_endian) {
+        if (crossfeed->sign)
+          crossfeed->func = &bs2b_cross_feed_s32le;
+        else
+          crossfeed->func = &bs2b_cross_feed_u32le;
+      }
+      else {
+        if (crossfeed->sign)
+          crossfeed->func = &bs2b_cross_feed_s32be;
+        else
+          crossfeed->func = &bs2b_cross_feed_u32be;
+      }
+    }
+  }
+  else {
+    if (crossfeed->width == 32) {
+      if (crossfeed->little_endian)
+        crossfeed->func = &bs2b_cross_feed_fle;
+      else
+        crossfeed->func = &bs2b_cross_feed_fbe;
+    }
+    else if (crossfeed->width == 64) {
+      if (crossfeed->little_endian)
+        crossfeed->func = &bs2b_cross_feed_dle;
+      else
+        crossfeed->func = &bs2b_cross_feed_dbe;
+    }
+  }
+}
+
 static gboolean
 plugin_init (GstPlugin * plugin)
 {
@@ -441,7 +434,8 @@ GST_PLUGIN_DEFINE (
     GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
     "crossfeed",
-    "Improve headphone listening of stereo audio records using the bs2b library.",
+    "Improve headphone listening of stereo audio records"
+        "using the bs2b library.",
     plugin_init,
     VERSION, "LGPL",
     "gstreamer0.10-bs2b",
