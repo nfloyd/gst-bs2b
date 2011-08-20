@@ -439,5 +439,5 @@ GST_PLUGIN_DEFINE (
     plugin_init,
     VERSION, "LGPL",
     "gstreamer0.10-bs2b",
-    "http://bitbucket.org/lazka/gst-bs2b/"
+    "https://github.com/lazka/gst-bs2b"
 );
