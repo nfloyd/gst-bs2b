@@ -226,11 +226,9 @@ static void
 gst_crossfeed_class_init (GstCrossfeedClass * klass)
 {
   GObjectClass *gobject_class;
-  GstElementClass *gstelement_class;
   GstBaseTransformClass *trans_class;
 
   gobject_class = (GObjectClass *) klass;
-  gstelement_class = (GstElementClass *) klass;
   trans_class = (GstBaseTransformClass *) klass;
 
   gobject_class->set_property = gst_crossfeed_set_property;
