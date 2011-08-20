@@ -1,0 +1,15 @@
+Source: gstreamer0.10-bs2b
+Priority: optional
+Section: libs
+Maintainer: Christoph Reiter <christoph.reiter@gmx.at>
+Standards-Version: 3.8.3
+Build-Depends: debhelper (>= 7), cdbs, pkg-config, dh-autoreconf,
+    libgstreamer-plugins-base0.10-dev, libgstreamer0.10-dev, libbs2b-dev
+
+Package: gstreamer0.10-bs2b
+Section: libs
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: A Gstreamer plugin for the Bauer stereophonic-to-binaural DSP library
+ The Bauer stereophonic-to-binaural DSP (bs2b) is designed to improve
+ headphone listening of stereo audio records.
