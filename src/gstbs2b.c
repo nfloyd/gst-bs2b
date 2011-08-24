@@ -94,49 +94,22 @@ static const GstElementDetails crossfeed_details = GST_ELEMENT_DETAILS (
       "using the bs2b library.",
   "Christoph Reiter <christoph.reiter@gmx.at>");
 
-static GstStaticPadTemplate sink_template_factory =
-    GST_STATIC_PAD_TEMPLATE ("sink",
-        GST_PAD_SINK,
-        GST_PAD_ALWAYS,
-        GST_STATIC_CAPS (
-            "audio/x-raw-int, "
-            "rate = (int) [ "
-                G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE)
-            " ], "
-            "channels = (int) 2, "
-            "endianness = (int) { 1234, 4321 }, "
-            "width = (int) { 8, 16, 24, 32 }, "
-            "signed = (boolean) { true, false }; "
-            "audio/x-raw-float, "
-            "rate = (int) [ "
-                G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE)
-            " ], "
-            "channels = (int) 2, "
-            "endianness = (int) { 1234, 4321 }, "
-            "width = (int) {32, 64} ")
-    );
-
-static GstStaticPadTemplate src_template_factory =
-  GST_STATIC_PAD_TEMPLATE ("src",
-    GST_PAD_SRC,
-    GST_PAD_ALWAYS,
-    GST_STATIC_CAPS (
-      "audio/x-raw-int, "
-      "rate = (int) [ "
-          G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE)
-      " ], "
-      "channels = (int) 2, "
-      "endianness = (int) { 1234, 4321 }, "
-      "width = (int) { 8, 16, 24, 32 }, "
-      "signed = (boolean) { true, false }; "
-      "audio/x-raw-float, "
-      "rate = (int) [ "
-          G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE)
-      " ], "
-      "channels = (int) 2, "
-      "endianness = (int) { 1234, 4321 }, "
-      "width = (int) {32, 64} ")
-  );
+#define ALLOWED_CAPS \
+  "audio/x-raw-int, " \
+  "rate = (int) [ " \
+      G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE) \
+  " ], " \
+  "channels = (int) 2, " \
+  "endianness = (int) { 1234, 4321 }, " \
+  "width = (int) { 8, 16, 24, 32 }, " \
+  "signed = (boolean) { true, false }; " \
+  "audio/x-raw-float, " \
+  "rate = (int) [ " \
+      G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE) \
+  " ], " \
+  "channels = (int) 2, " \
+  "endianness = (int) { 1234, 4321 }, " \
+  "width = (int) {32, 64} "
 
 enum
 {
@@ -178,13 +151,14 @@ static void
 gst_crossfeed_base_init (gpointer g_class)
 {
   GstElementClass *element_class = GST_ELEMENT_CLASS (g_class);
-
-  gst_element_class_add_pad_template (element_class,
-      gst_static_pad_template_get (&sink_template_factory));
-  gst_element_class_add_pad_template (element_class,
-      gst_static_pad_template_get (&src_template_factory));
+  GstCaps *caps;
 
   gst_element_class_set_details (element_class, &crossfeed_details);
+
+  caps = gst_caps_from_string (ALLOWED_CAPS);
+  gst_audio_filter_class_add_pad_templates (GST_AUDIO_FILTER_CLASS (g_class),
+    caps);
+  gst_caps_unref (caps);
 }
 
 static void
