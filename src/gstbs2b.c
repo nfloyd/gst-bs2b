@@ -72,14 +72,10 @@ typedef struct _GstCrossfeedClass GstCrossfeedClass;
 struct _GstCrossfeed {
   GstAudioFilter element;
 
-  gboolean active;
-  guint32 level;
-  gint fcut;
-  gint feed;
-
   t_bs2bdp bs2bdp;
   void (*func) ();
 
+  gboolean active;
   gint divider;
 };
 
@@ -130,7 +126,7 @@ typedef enum
 
 #define DEFAULT_FCUT (BS2B_DEFAULT_CLEVEL & 0xFFFF)
 #define DEFAULT_FEED (BS2B_DEFAULT_CLEVEL >> 16)
-#define FEED_FACTOR 10.0
+#define FEED_FACTOR 10.0f
 
 static void gst_crossfeed_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
@@ -382,14 +378,11 @@ gst_crossfeed_set_property (GObject * object, guint prop_id,
         bs2b_clear (crossfeed->bs2bdp);
       break;
     case ARG_FCUT:
-      crossfeed->fcut = g_value_get_int (value);
-      bs2b_set_level_fcut (crossfeed->bs2bdp, crossfeed->fcut);
-      crossfeed->level = bs2b_get_level (crossfeed->bs2bdp);
+      bs2b_set_level_fcut (crossfeed->bs2bdp, g_value_get_int (value));
       break;
     case ARG_FEED:
-      crossfeed->feed = (gint) (g_value_get_float (value) * FEED_FACTOR);
-      bs2b_set_level_feed (crossfeed->bs2bdp, crossfeed->feed);
-      crossfeed->level = bs2b_get_level (crossfeed->bs2bdp);
+      bs2b_set_level_feed (crossfeed->bs2bdp,
+        g_value_get_float (value) * FEED_FACTOR);
       break;
     case ARG_PRESET:
       switch (g_value_get_enum (value)) {
@@ -424,13 +417,14 @@ gst_crossfeed_get_property (GObject * object, guint prop_id, GValue * value,
       g_value_set_boolean (value, crossfeed->active);
       break;
     case ARG_FCUT:
-      g_value_set_int (value, crossfeed->fcut);
+      g_value_set_int (value, bs2b_get_level_fcut (crossfeed->bs2bdp));
       break;
     case ARG_FEED:
-      g_value_set_float (value, (crossfeed->feed / FEED_FACTOR));
+      g_value_set_float (value,
+          bs2b_get_level_feed (crossfeed->bs2bdp) / FEED_FACTOR);
       break;
     case ARG_PRESET:
-      switch (crossfeed->level) {
+      switch (bs2b_get_level (crossfeed->bs2bdp)) {
         case BS2B_DEFAULT_CLEVEL:
           g_value_set_enum (value, PRESET_DEFAULT);
           break;
