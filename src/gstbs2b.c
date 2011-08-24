@@ -178,24 +178,28 @@ gst_crossfeed_class_init (GstCrossfeedClass * klass)
   g_object_class_install_property (gobject_class, ARG_ACTIVE,
       g_param_spec_boolean ("active", "Active",
           "Specify whether the filter is active",
-          TRUE, G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
+          TRUE, G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE |
+          G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, ARG_FCUT,
       g_param_spec_int ("fcut", "Frequency cut",
           "Lowpass filter cut frequency (Hz)",
           BS2B_MINFCUT, BS2B_MAXFCUT, DEFAULT_FCUT,
-          G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
+          G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE |
+          G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, ARG_FEED,
       g_param_spec_float ("feed", "Feed level", "Feed Level (db)",
           BS2B_MINFEED / FEED_FACTOR, BS2B_MAXFEED / FEED_FACTOR,
           DEFAULT_FEED / FEED_FACTOR,
-          G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
+          G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE |
+          G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, ARG_PRESET,
       g_param_spec_enum ("preset", "Preset", "Bs2b filter preset",
           gst_crossfeed_preset_get_type (),
-          PRESET_DEFAULT, G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
+          PRESET_DEFAULT, G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE |
+          G_PARAM_STATIC_STRINGS));
 }
 
 static void
