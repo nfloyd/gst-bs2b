@@ -159,13 +159,13 @@ enum
   ARG_PRESET
 };
 
-enum
+typedef enum
 {
   PRESET_DEFAULT,
   PRESET_CMOY,
   PRESET_JMEIER,
   PRESET_NONE
-};
+} GstBs2bPreset;
 
 #define DEFAULT_FCUT (BS2B_DEFAULT_CLEVEL & 0xFFFF)
 #define DEFAULT_FEED (BS2B_DEFAULT_CLEVEL >> 16)
@@ -175,6 +175,7 @@ static void gst_crossfeed_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
 static void gst_crossfeed_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
+static GType gst_crossfeed_preset_get_type (void);
 
 static GstFlowReturn gst_crossfeed_transform_inplace (GstBaseTransform * base,
     GstBuffer * outbuf);
@@ -235,24 +236,26 @@ gst_crossfeed_class_init (GstCrossfeedClass * klass)
   gobject_class->get_property = gst_crossfeed_get_property;
 
   g_object_class_install_property (gobject_class, ARG_ACTIVE,
-      g_param_spec_boolean ("active", "active", "active",
+      g_param_spec_boolean ("active", "Active",
+          "Specify whether the filter is active",
           TRUE, G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
 
   g_object_class_install_property (gobject_class, ARG_FCUT,
-      g_param_spec_int ("fcut", "fcut", "fcut",
+      g_param_spec_int ("fcut", "Frequency cut",
+          "Lowpass filter cut frequency (Hz)",
           BS2B_MINFCUT, BS2B_MAXFCUT, DEFAULT_FCUT,
           G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
 
   g_object_class_install_property (gobject_class, ARG_FEED,
-      g_param_spec_float ("feed", "feed", "feed",
+      g_param_spec_float ("feed", "Feed level", "Feed Level (db)",
           BS2B_MINFEED / FEED_FACTOR, BS2B_MAXFEED / FEED_FACTOR,
           DEFAULT_FEED / FEED_FACTOR,
           G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
 
   g_object_class_install_property (gobject_class, ARG_PRESET,
-      g_param_spec_int ("preset", "preset", "preset",
-          PRESET_DEFAULT, PRESET_JMEIER, PRESET_DEFAULT,
-          G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
+      g_param_spec_enum ("preset", "Preset", "Bs2b filter preset",
+          gst_crossfeed_preset_get_type (),
+          PRESET_DEFAULT, G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
 
   trans_class->transform_ip = gst_crossfeed_transform_inplace;
   trans_class->set_caps = gst_crossfeed_setcaps;
@@ -276,6 +279,42 @@ gst_crossfeed_transform_inplace (GstBaseTransform * base, GstBuffer * outbuf)
     crossfeed->func (crossfeed->bs2bdp, data, samples / crossfeed->divider);
 
   return GST_FLOW_OK;
+}
+
+static GType
+gst_crossfeed_preset_get_type (void)
+{
+  static GType crossfeed_preset_type = 0;
+
+  if (!crossfeed_preset_type) {
+    static GEnumValue types[] = {
+      {
+        PRESET_DEFAULT,
+        "Closest to virtual speaker placement (30°, 3 meter)   [700Hz, 4.5dB]",
+        "default"
+      },
+      {
+        PRESET_CMOY,
+        "Close to Chu Moy's crossfeeder (popular)              [700Hz, 6.0dB]",
+        "cmoy"
+      },
+      {
+        PRESET_JMEIER,
+        "Close to Jan Meier's CORDA amplifiers (little change) [650Hz, 9.0dB]",
+        "jmeier"
+      },
+      {
+        PRESET_NONE,
+        "No preset",
+        "none"
+      },
+      {0, NULL, NULL},
+    };
+
+    crossfeed_preset_type = g_enum_register_static ("GstBs2bPreset", types);
+  }
+
+  return crossfeed_preset_type;
 }
 
 static void
@@ -302,7 +341,7 @@ gst_crossfeed_set_property (GObject * object, guint prop_id,
       crossfeed->level = bs2b_get_level (crossfeed->bs2bdp);
       break;
     case ARG_PRESET:
-      switch (g_value_get_int (value)) {
+      switch (g_value_get_enum (value)) {
         case PRESET_DEFAULT:
           bs2b_set_level (crossfeed->bs2bdp, BS2B_DEFAULT_CLEVEL);
           break;
@@ -345,16 +384,16 @@ gst_crossfeed_get_property (GObject * object, guint prop_id, GValue * value,
     case ARG_PRESET:
       switch (crossfeed->level) {
         case BS2B_DEFAULT_CLEVEL:
-          g_value_set_int (value, PRESET_DEFAULT);
+          g_value_set_enum (value, PRESET_DEFAULT);
           break;
         case BS2B_CMOY_CLEVEL:
-          g_value_set_int (value, PRESET_CMOY);
+          g_value_set_enum (value, PRESET_CMOY);
           break;
         case BS2B_JMEIER_CLEVEL:
-          g_value_set_int (value, PRESET_JMEIER);
+          g_value_set_enum (value, PRESET_JMEIER);
           break;
         default:
-          g_value_set_int (value, PRESET_NONE);
+          g_value_set_enum (value, PRESET_NONE);
           break;
       }
       break;
