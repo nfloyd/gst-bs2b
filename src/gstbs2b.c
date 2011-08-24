@@ -99,7 +99,7 @@ static const GstElementDetails crossfeed_details = GST_ELEMENT_DETAILS (
   "rate = (int) [ " \
       G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE) \
   " ], " \
-  "channels = (int) 2, " \
+  "channels = (int) { 1, 2 }, " \
   "endianness = (int) { 1234, 4321 }, " \
   "width = (int) { 8, 16, 24, 32 }, " \
   "signed = (boolean) { true, false }; " \
@@ -107,7 +107,7 @@ static const GstElementDetails crossfeed_details = GST_ELEMENT_DETAILS (
   "rate = (int) [ " \
       G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE) \
   " ], " \
-  "channels = (int) 2, " \
+  "channels = (int) { 1, 2 }, " \
   "endianness = (int) { 1234, 4321 }, " \
   "width = (int) {32, 64} "
 
@@ -145,6 +145,8 @@ static void gst_crossfeed_finalize (GObject * object);
 
 static GstFlowReturn gst_crossfeed_transform_inplace (GstBaseTransform * base,
     GstBuffer * outbuf);
+
+static void gst_crossfeed_update_passthrough (GstCrossfeed * crossfeed);
 
 GST_BOILERPLATE (GstCrossfeed, gst_crossfeed, GstAudioFilter,
     GST_TYPE_AUDIO_FILTER);
@@ -277,6 +279,8 @@ static gboolean gst_crossfeed_setup (GstAudioFilter * filter,
   if (crossfeed->func == NULL)
     return FALSE;
 
+  gst_crossfeed_update_passthrough (crossfeed);
+
   crossfeed->divider = format->width / 4;
 
   // set_rate calls clear, so no need to reset the filter here
@@ -303,14 +307,27 @@ gst_crossfeed_transform_inplace (GstBaseTransform * base, GstBuffer * outbuf)
   void *data = GST_BUFFER_DATA (outbuf);
   gint samples = GST_BUFFER_SIZE (outbuf);
 
-  if(G_UNLIKELY (GST_BUFFER_FLAG_IS_SET (outbuf, GST_BUFFER_FLAG_GAP)) ||
-    G_UNLIKELY (crossfeed->func == NULL))
+  if(gst_base_transform_is_passthrough (base) ||
+      G_UNLIKELY (GST_BUFFER_FLAG_IS_SET (outbuf, GST_BUFFER_FLAG_GAP)))
     return GST_FLOW_OK;
 
-  if (crossfeed->active)
-    crossfeed->func (crossfeed->bs2bdp, data, samples / crossfeed->divider);
+  crossfeed->func (crossfeed->bs2bdp, data, samples / crossfeed->divider);
 
   return GST_FLOW_OK;
+}
+
+static void
+gst_crossfeed_update_passthrough (GstCrossfeed * crossfeed)
+{
+  GstAudioFilter *filter = GST_AUDIO_FILTER (crossfeed);
+  GstBaseTransform *trans = GST_BASE_TRANSFORM (crossfeed);
+  gboolean passthrough;
+
+  passthrough = (
+      filter->format.channels != 2 ||
+      !crossfeed->active) ? TRUE : FALSE;
+
+  gst_base_transform_set_passthrough (trans, passthrough);
 }
 
 static GType
@@ -358,6 +375,7 @@ gst_crossfeed_set_property (GObject * object, guint prop_id,
   switch (prop_id) {
     case ARG_ACTIVE:
       crossfeed->active = g_value_get_boolean (value);
+      gst_crossfeed_update_passthrough (crossfeed);
       break;
     case ARG_FCUT:
       crossfeed->fcut = g_value_get_int (value);
