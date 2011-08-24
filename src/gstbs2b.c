@@ -141,6 +141,8 @@ static GType gst_crossfeed_preset_get_type (void);
 static gboolean gst_crossfeed_setup (GstAudioFilter * self,
   GstRingBufferSpec * format);
 
+static void gst_crossfeed_finalize (GObject * object);
+
 static GstFlowReturn gst_crossfeed_transform_inplace (GstBaseTransform * base,
     GstBuffer * outbuf);
 
@@ -170,6 +172,7 @@ gst_crossfeed_class_init (GstCrossfeedClass * klass)
 
   gobject_class->set_property = gst_crossfeed_set_property;
   gobject_class->get_property = gst_crossfeed_get_property;
+  gobject_class->finalize = gst_crossfeed_finalize;
 
   trans_class->transform_ip = gst_crossfeed_transform_inplace;
 
@@ -280,6 +283,17 @@ static gboolean gst_crossfeed_setup (GstAudioFilter * filter,
   bs2b_set_srate (crossfeed->bs2bdp, format->rate);
 
   return TRUE;
+}
+
+static void
+gst_crossfeed_finalize (GObject * object)
+{
+  GstCrossfeed *crossfeed = GST_CROSSFEED (object);
+
+  bs2b_close(crossfeed->bs2bdp);
+  crossfeed->bs2bdp = NULL;
+
+  G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
 static GstFlowReturn
