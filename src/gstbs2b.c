@@ -49,8 +49,6 @@
 #include "config.h"
 #endif
 
-#include <string.h>
-
 #include <gst/gst.h>
 #include <gst/audio/audio.h>
 #include <gst/audio/gstaudiofilter.h>
@@ -79,15 +77,9 @@ struct _GstCrossfeed {
   gint fcut;
   gint feed;
 
-  gint samplerate;
-  gboolean is_int;
-  gboolean little_endian;
-  gint width;
-  gint depth;
-  gboolean sign;
-
   t_bs2bdp bs2bdp;
   void (*func) ();
+
   gint divider;
 };
 
@@ -113,10 +105,8 @@ static GstStaticPadTemplate sink_template_factory =
             " ], "
             "channels = (int) 2, "
             "endianness = (int) { 1234, 4321 }, "
-            "width = (int) { 8, 16, 32 }, "
-            "depth = (int) { 8, 16, 32 }, "
+            "width = (int) { 8, 16, 24, 32 }, "
             "signed = (boolean) { true, false }; "
-
             "audio/x-raw-float, "
             "rate = (int) [ "
                 G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE)
@@ -137,10 +127,8 @@ static GstStaticPadTemplate src_template_factory =
       " ], "
       "channels = (int) 2, "
       "endianness = (int) { 1234, 4321 }, "
-      "width = (int) { 8, 16, 32 }, "
-      "depth = (int) { 8, 16, 32 }, "
+      "width = (int) { 8, 16, 24, 32 }, "
       "signed = (boolean) { true, false }; "
-
       "audio/x-raw-float, "
       "rate = (int) [ "
           G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE)
@@ -177,38 +165,14 @@ static void gst_crossfeed_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
 static GType gst_crossfeed_preset_get_type (void);
 
+static gboolean gst_crossfeed_setup (GstAudioFilter * self,
+  GstRingBufferSpec * format);
+
 static GstFlowReturn gst_crossfeed_transform_inplace (GstBaseTransform * base,
     GstBuffer * outbuf);
 
-static void set_bs2b_filter_function (GstCrossfeed *crossfeed);
-
 GST_BOILERPLATE (GstCrossfeed, gst_crossfeed, GstAudioFilter,
     GST_TYPE_AUDIO_FILTER);
-
-static gboolean
-gst_crossfeed_setcaps (GstBaseTransform * trans, GstCaps * in, GstCaps * out)
-{
-  GstCrossfeed *crossfeed = GST_CROSSFEED(trans);
-  GstStructure *s = gst_caps_get_structure (in, 0);
-
-  crossfeed->is_int = !strcmp (gst_structure_get_name (s), "audio/x-raw-int");
-
-  gst_structure_get_int (s, "rate", &crossfeed->samplerate);
-  bs2b_set_srate (crossfeed->bs2bdp, crossfeed->samplerate);
-
-  crossfeed->little_endian =
-      (g_value_get_int (gst_structure_get_value (s, "endianness")) == 1234);
-
-  gst_structure_get_int (s, "width", &crossfeed->width);
-
-  gst_structure_get_int (s, "depth", &crossfeed->depth);
-
-  gst_structure_get_boolean (s, "signed", &crossfeed->sign);
-
-  set_bs2b_filter_function (crossfeed);
-
-  return TRUE;
-}
 
 static void
 gst_crossfeed_base_init (gpointer g_class)
@@ -226,14 +190,16 @@ gst_crossfeed_base_init (gpointer g_class)
 static void
 gst_crossfeed_class_init (GstCrossfeedClass * klass)
 {
-  GObjectClass *gobject_class;
-  GstBaseTransformClass *trans_class;
-
-  gobject_class = (GObjectClass *) klass;
-  trans_class = (GstBaseTransformClass *) klass;
+  GObjectClass *gobject_class = (GObjectClass *) klass;
+  GstBaseTransformClass *trans_class = (GstBaseTransformClass *) klass;
+  GstAudioFilterClass *filter_class = (GstAudioFilterClass *) klass;
 
   gobject_class->set_property = gst_crossfeed_set_property;
   gobject_class->get_property = gst_crossfeed_get_property;
+
+  trans_class->transform_ip = gst_crossfeed_transform_inplace;
+
+  filter_class->setup = gst_crossfeed_setup;
 
   g_object_class_install_property (gobject_class, ARG_ACTIVE,
       g_param_spec_boolean ("active", "Active",
@@ -256,9 +222,6 @@ gst_crossfeed_class_init (GstCrossfeedClass * klass)
       g_param_spec_enum ("preset", "Preset", "Bs2b filter preset",
           gst_crossfeed_preset_get_type (),
           PRESET_DEFAULT, G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE));
-
-  trans_class->transform_ip = gst_crossfeed_transform_inplace;
-  trans_class->set_caps = gst_crossfeed_setcaps;
 }
 
 static void
@@ -266,6 +229,77 @@ gst_crossfeed_init (GstCrossfeed * crossfeed, GstCrossfeedClass * klass)
 {
   crossfeed->bs2bdp = bs2b_open ();
   crossfeed->active = TRUE;
+}
+
+static gboolean gst_crossfeed_setup (GstAudioFilter * filter,
+  GstRingBufferSpec * format)
+{
+  GstCrossfeed *crossfeed = GST_CROSSFEED (filter);
+
+  crossfeed->func = NULL;
+
+  if (format->type == GST_BUFTYPE_LINEAR) {
+    if (format->width == 8) {
+      if (format->sign)
+        crossfeed->func = &bs2b_cross_feed_s8;
+      else
+        crossfeed->func = &bs2b_cross_feed_u8;
+    }
+    else if (format->width == 16) {
+      if (format->bigend && format->sign)
+        crossfeed->func = &bs2b_cross_feed_s16be;
+      else if(format->bigend)
+        crossfeed->func = &bs2b_cross_feed_u16be;
+      else if (format->sign)
+        crossfeed->func = &bs2b_cross_feed_s16le;
+      else
+        crossfeed->func = &bs2b_cross_feed_u16le;
+    }
+    else if (format->width == 24) {
+      if (format->bigend && format->sign)
+        crossfeed->func = &bs2b_cross_feed_s24be;
+      else if(format->bigend)
+        crossfeed->func = &bs2b_cross_feed_u24be;
+      else if (format->sign)
+        crossfeed->func = &bs2b_cross_feed_s24le;
+      else
+        crossfeed->func = &bs2b_cross_feed_u24le;
+    }
+    else if (format->width == 32) {
+      if (format->bigend && format->sign)
+        crossfeed->func = &bs2b_cross_feed_s32be;
+      else if(format->bigend)
+        crossfeed->func = &bs2b_cross_feed_u32be;
+      else if (format->sign)
+        crossfeed->func = &bs2b_cross_feed_s32le;
+      else
+        crossfeed->func = &bs2b_cross_feed_u32le;
+    }
+  }
+  else if (format->type == GST_BUFTYPE_FLOAT) {
+    if (format->width == 32) {
+      if (format->bigend)
+        crossfeed->func = &bs2b_cross_feed_fbe;
+      else
+        crossfeed->func = &bs2b_cross_feed_fle;
+    }
+    else if (format->width == 64) {
+      if (format->bigend)
+        crossfeed->func = &bs2b_cross_feed_dbe;
+      else
+        crossfeed->func = &bs2b_cross_feed_dle;
+    }
+  }
+
+  if (crossfeed->func == NULL)
+    return FALSE;
+
+  crossfeed->divider = format->width / 4;
+
+  // set_rate calls clear, so no need to reset the filter here
+  bs2b_set_srate (crossfeed->bs2bdp, format->rate);
+
+  return TRUE;
 }
 
 static GstFlowReturn
@@ -321,10 +355,7 @@ static void
 gst_crossfeed_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
-  GstCrossfeed *crossfeed;
-
-  g_return_if_fail (GST_IS_CROSSFEED (object));
-  crossfeed = GST_CROSSFEED (object);
+  GstCrossfeed *crossfeed = GST_CROSSFEED (object);
 
   switch (prop_id) {
     case ARG_ACTIVE:
@@ -366,10 +397,7 @@ static void
 gst_crossfeed_get_property (GObject * object, guint prop_id, GValue * value,
     GParamSpec * pspec)
 {
-  GstCrossfeed *crossfeed;
-
-  g_return_if_fail (GST_IS_CROSSFEED (object));
-  crossfeed = GST_CROSSFEED (object);
+  GstCrossfeed *crossfeed = GST_CROSSFEED (object);
 
   switch (prop_id) {
     case ARG_ACTIVE:
@@ -400,63 +428,6 @@ gst_crossfeed_get_property (GObject * object, guint prop_id, GValue * value,
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
-  }
-}
-
-static void
-set_bs2b_filter_function (GstCrossfeed *crossfeed)
-{
-  crossfeed->divider = crossfeed->width / 4;
-
-  if (crossfeed->is_int) {
-    if (crossfeed->width == 8) {
-      if (crossfeed->sign)
-        crossfeed->func = &bs2b_cross_feed_s8;
-      else
-        crossfeed->func = &bs2b_cross_feed_u8;
-    }
-    else if (crossfeed->width == 16) {
-      if (crossfeed->little_endian) {
-        if (crossfeed->sign)
-          crossfeed->func = &bs2b_cross_feed_s16le;
-        else
-          crossfeed->func = &bs2b_cross_feed_u16le;
-      }
-      else {
-        if (crossfeed->sign)
-          crossfeed->func = &bs2b_cross_feed_s16be;
-        else
-          crossfeed->func = &bs2b_cross_feed_u16be;
-      }
-    }
-    else if (crossfeed->width == 32) {
-      if (crossfeed->little_endian) {
-        if (crossfeed->sign)
-          crossfeed->func = &bs2b_cross_feed_s32le;
-        else
-          crossfeed->func = &bs2b_cross_feed_u32le;
-      }
-      else {
-        if (crossfeed->sign)
-          crossfeed->func = &bs2b_cross_feed_s32be;
-        else
-          crossfeed->func = &bs2b_cross_feed_u32be;
-      }
-    }
-  }
-  else {
-    if (crossfeed->width == 32) {
-      if (crossfeed->little_endian)
-        crossfeed->func = &bs2b_cross_feed_fle;
-      else
-        crossfeed->func = &bs2b_cross_feed_fbe;
-    }
-    else if (crossfeed->width == 64) {
-      if (crossfeed->little_endian)
-        crossfeed->func = &bs2b_cross_feed_dle;
-      else
-        crossfeed->func = &bs2b_cross_feed_dbe;
-    }
   }
 }
 
