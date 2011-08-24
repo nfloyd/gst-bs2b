@@ -283,7 +283,7 @@ static gboolean gst_crossfeed_setup (GstAudioFilter * filter,
 
   crossfeed->divider = format->width / 4;
 
-  // set_rate calls clear, so no need to reset the filter here
+  /* set_rate calls clear, so no need to reset the filter here */
   bs2b_set_srate (crossfeed->bs2bdp, format->rate);
 
   return TRUE;
@@ -376,6 +376,10 @@ gst_crossfeed_set_property (GObject * object, guint prop_id,
     case ARG_ACTIVE:
       crossfeed->active = g_value_get_boolean (value);
       gst_crossfeed_update_passthrough (crossfeed);
+      /* Clear the filter buffer if it gets set inactive, so we have
+       * a fresh start when it gets activated again. */
+      if (!crossfeed->active)
+        bs2b_clear (crossfeed->bs2bdp);
       break;
     case ARG_FCUT:
       crossfeed->fcut = g_value_get_int (value);
