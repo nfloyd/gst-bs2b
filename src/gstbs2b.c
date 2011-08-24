@@ -205,6 +205,8 @@ gst_crossfeed_class_init (GstCrossfeedClass * klass)
 static void
 gst_crossfeed_init (GstCrossfeed * crossfeed, GstCrossfeedClass * klass)
 {
+  gst_base_transform_set_gap_aware (GST_BASE_TRANSFORM (crossfeed), TRUE);
+
   crossfeed->bs2bdp = bs2b_open ();
   crossfeed->active = TRUE;
 }
@@ -287,7 +289,11 @@ gst_crossfeed_transform_inplace (GstBaseTransform * base, GstBuffer * outbuf)
   void *data = GST_BUFFER_DATA (outbuf);
   gint samples = GST_BUFFER_SIZE (outbuf);
 
-  if (G_LIKELY (crossfeed->func != NULL) && crossfeed->active)
+  if(G_UNLIKELY (GST_BUFFER_FLAG_IS_SET (outbuf, GST_BUFFER_FLAG_GAP)) ||
+    G_UNLIKELY (crossfeed->func == NULL))
+    return GST_FLOW_OK;
+
+  if (crossfeed->active)
     crossfeed->func (crossfeed->bs2bdp, data, samples / crossfeed->divider);
 
   return GST_FLOW_OK;
