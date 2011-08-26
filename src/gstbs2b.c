@@ -139,6 +139,9 @@ static gboolean gst_crossfeed_setup (GstAudioFilter * self,
 
 static void gst_crossfeed_finalize (GObject * object);
 
+static gboolean gst_crossfeed_sink_eventfunc (GstBaseTransform * trans,
+    GstEvent * event);
+
 static GstFlowReturn gst_crossfeed_transform_inplace (GstBaseTransform * base,
     GstBuffer * outbuf);
 
@@ -173,7 +176,7 @@ gst_crossfeed_class_init (GstCrossfeedClass * klass)
   gobject_class->finalize = gst_crossfeed_finalize;
 
   trans_class->transform_ip = gst_crossfeed_transform_inplace;
-
+  trans_class->event = gst_crossfeed_sink_eventfunc;
   filter_class->setup = gst_crossfeed_setup;
 
   g_object_class_install_property (gobject_class, ARG_ACTIVE,
@@ -294,6 +297,17 @@ gst_crossfeed_finalize (GObject * object)
   crossfeed->bs2bdp = NULL;
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
+}
+
+static gboolean gst_crossfeed_sink_eventfunc (GstBaseTransform * trans,
+    GstEvent * event)
+{
+  GstCrossfeed *crossfeed = GST_CROSSFEED (trans);
+
+  if (GST_EVENT_TYPE (event) == GST_EVENT_NEWSEGMENT)
+    bs2b_clear (crossfeed->bs2bdp);
+
+  return GST_BASE_TRANSFORM_CLASS (parent_class)->event (trans, event);
 }
 
 static GstFlowReturn
