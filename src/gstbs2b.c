@@ -19,19 +19,6 @@
  * Boston, MA 02111-1307, USA.
  */
 
-/* This uses the bs2b library, created by Boris Mikhaylov
- * http://bs2b.sourceforge.net/
- *
- * activate -> active=True (default)
- * frequency cut (Hz) -> fcut=300..2000
- * feed level (db) -> feed=1.0..15.0
- *
- * Presets:
- *  - DEFAULT: preset=0 <=> fcut=700 / feed=4.5 (This is the overal default)
- *  - CMOY: preset=1 <=> fcut=700 / feed=6.0
- *  - JMEIER: preset=2 <=> fcut=650 / feed=9.5
- */
-
 /**
  * SECTION:element-crossfeed
  *
@@ -40,8 +27,8 @@
  * <refsect2>
  * <title>Example pipelines</title>
  * |[
- * gst-launch -v filesrc location=sine.ogg ! oggdemux ! vorbisdec ! audioconvert ! crossfeed ! alsasink
- * ]| Play an Ogg/Vorbis file.
+ * gst-launch -v audiotestsrc ! interleave name=i ! crossfeed ! autoaudiosink audiotestsrc freq=330 ! i.
+ * ]| Play two independent sine test sources and crossfeed them.
  * </refsect2>
  */
 
@@ -194,13 +181,13 @@ gst_crossfeed_class_init (GstCrossfeedClass * klass)
 
   g_object_class_install_property (gobject_class, ARG_FCUT,
       g_param_spec_int ("fcut", "Frequency cut",
-          "Lowpass filter cut frequency (Hz)",
+          "Low-pass filter cut frequency (Hz)",
           BS2B_MINFCUT, BS2B_MAXFCUT, DEFAULT_FCUT,
           G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE |
           G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, ARG_FEED,
-      g_param_spec_int ("feed", "Feed level", "Feed Level (db/10)",
+      g_param_spec_int ("feed", "Feed level", "Feed Level (dB/10)",
           BS2B_MINFEED, BS2B_MAXFEED, DEFAULT_FEED,
           G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE |
           G_PARAM_STATIC_STRINGS));
