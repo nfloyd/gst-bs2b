@@ -134,7 +134,6 @@ typedef enum
 
 #define DEFAULT_FCUT (BS2B_DEFAULT_CLEVEL & 0xFFFF)
 #define DEFAULT_FEED (BS2B_DEFAULT_CLEVEL >> 16)
-#define FEED_FACTOR 10.0f
 
 static void gst_crossfeed_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
@@ -201,9 +200,8 @@ gst_crossfeed_class_init (GstCrossfeedClass * klass)
           G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, ARG_FEED,
-      g_param_spec_float ("feed", "Feed level", "Feed Level (db)",
-          BS2B_MINFEED / FEED_FACTOR, BS2B_MAXFEED / FEED_FACTOR,
-          DEFAULT_FEED / FEED_FACTOR,
+      g_param_spec_int ("feed", "Feed level", "Feed Level (db/10)",
+          BS2B_MINFEED, BS2B_MAXFEED, DEFAULT_FEED,
           G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE |
           G_PARAM_STATIC_STRINGS));
 
@@ -428,8 +426,7 @@ gst_crossfeed_set_property (GObject * object, guint prop_id,
       break;
     case ARG_FEED:
       GST_CROSSFEED_BS2B_LOCK (crossfeed);
-      bs2b_set_level_feed (crossfeed->bs2bdp,
-          g_value_get_float (value) * FEED_FACTOR);
+      bs2b_set_level_feed (crossfeed->bs2bdp, g_value_get_int (value));
       GST_CROSSFEED_BS2B_UNLOCK (crossfeed);
       break;
     case ARG_PRESET:
@@ -477,8 +474,7 @@ gst_crossfeed_get_property (GObject * object, guint prop_id, GValue * value,
       break;
     case ARG_FEED:
       GST_CROSSFEED_BS2B_LOCK (crossfeed);
-      g_value_set_float (value,
-          bs2b_get_level_feed (crossfeed->bs2bdp) / FEED_FACTOR);
+      g_value_set_int (value, bs2b_get_level_feed (crossfeed->bs2bdp));
       GST_CROSSFEED_BS2B_UNLOCK (crossfeed);
       break;
     case ARG_PRESET:

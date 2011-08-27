@@ -80,7 +80,7 @@ class CrossfeedProperties(unittest.TestCase):
     def test_default(self):
         self.assertEqual(self.props["active"].default_value, True)
         self.assertEqual(self.props["fcut"].default_value, 700)
-        self.assertEqual(self.props["feed"].default_value, 4.5)
+        self.assertEqual(self.props["feed"].default_value, 45)
         self.assertEqual(self.props["preset"].default_value, 0)
         self.assertEqual(
             self.props["preset"].default_value.value_nick, "default")
@@ -88,20 +88,20 @@ class CrossfeedProperties(unittest.TestCase):
     def test_real_default(self):
         self.assertEqual(self.crossfeed.get_property("active"), True)
         self.assertEqual(self.crossfeed.get_property("fcut"), 700)
-        self.assertEqual(self.crossfeed.get_property("feed"), 4.5)
+        self.assertEqual(self.crossfeed.get_property("feed"), 45)
         self.assertEqual(self.crossfeed.get_property("preset").real, 0)
 
     def test_range(self):
         self.assertEqual(self.props["fcut"].maximum, 2000)
         self.assertEqual(self.props["fcut"].minimum, 300)
 
-        self.assertEqual(self.props["feed"].maximum, 15.0)
-        self.assertEqual(self.props["feed"].minimum, 1.0)
+        self.assertEqual(self.props["feed"].maximum, 150)
+        self.assertEqual(self.props["feed"].minimum, 10)
 
     def test_types(self):
         self.assertEqual(self.props["active"].value_type, gobject.TYPE_BOOLEAN)
         self.assertEqual(self.props["fcut"].value_type, gobject.TYPE_INT)
-        self.assertEqual(self.props["feed"].value_type, gobject.TYPE_FLOAT)
+        self.assertEqual(self.props["feed"].value_type, gobject.TYPE_INT)
         self.assertEqual(
             self.props["preset"].value_type.parent, gobject.TYPE_ENUM)
 
