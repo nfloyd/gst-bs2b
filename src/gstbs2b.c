@@ -69,12 +69,20 @@ typedef struct _GstCrossfeedClass GstCrossfeedClass;
 #define GST_IS_CROSSFEED_CLASS(klass) \
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_CROSSFEED))
 
+#define GST_CROSSFEED_BS2B_LOCK(obj) g_mutex_lock (obj->bs2b_lock)
+#define GST_CROSSFEED_BS2B_UNLOCK(obj) g_mutex_unlock (obj->bs2b_lock)
+
+#define GST_CROSSFEED_LOCK(obj) g_mutex_lock (obj->lock)
+#define GST_CROSSFEED_UNLOCK(obj) g_mutex_unlock (obj->lock)
+
 struct _GstCrossfeed {
   GstAudioFilter element;
 
+  GMutex *bs2b_lock;
   t_bs2bdp bs2bdp;
   void (*func) ();
 
+  GMutex *lock;
   gboolean active;
   gint divider;
 };
@@ -211,8 +219,13 @@ gst_crossfeed_init (GstCrossfeed * crossfeed, GstCrossfeedClass * klass)
 {
   gst_base_transform_set_gap_aware (GST_BASE_TRANSFORM (crossfeed), TRUE);
 
-  crossfeed->bs2bdp = bs2b_open ();
+  crossfeed->lock = g_mutex_new();
+  crossfeed->bs2b_lock = g_mutex_new();
   crossfeed->active = TRUE;
+
+  GST_CROSSFEED_BS2B_LOCK (crossfeed);
+  crossfeed->bs2bdp = bs2b_open ();
+  GST_CROSSFEED_BS2B_UNLOCK (crossfeed);
 }
 
 static gboolean gst_crossfeed_setup (GstAudioFilter * filter,
@@ -278,12 +291,16 @@ static gboolean gst_crossfeed_setup (GstAudioFilter * filter,
   if (crossfeed->func == NULL)
     return FALSE;
 
+  GST_CROSSFEED_LOCK (crossfeed);
   gst_crossfeed_update_passthrough (crossfeed);
+  GST_CROSSFEED_UNLOCK (crossfeed);
 
   crossfeed->divider = format->width / 4;
 
   /* set_rate calls clear, so no need to reset the filter here */
+  GST_CROSSFEED_BS2B_LOCK (crossfeed);
   bs2b_set_srate (crossfeed->bs2bdp, format->rate);
+  GST_CROSSFEED_BS2B_UNLOCK (crossfeed);
 
   return TRUE;
 }
@@ -296,6 +313,9 @@ gst_crossfeed_finalize (GObject * object)
   bs2b_close(crossfeed->bs2bdp);
   crossfeed->bs2bdp = NULL;
 
+  g_mutex_free (crossfeed->bs2b_lock);
+  g_mutex_free (crossfeed->lock);
+
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
@@ -304,8 +324,11 @@ static gboolean gst_crossfeed_sink_eventfunc (GstBaseTransform * trans,
 {
   GstCrossfeed *crossfeed = GST_CROSSFEED (trans);
 
-  if (GST_EVENT_TYPE (event) == GST_EVENT_NEWSEGMENT)
+  if (GST_EVENT_TYPE (event) == GST_EVENT_NEWSEGMENT) {
+    GST_CROSSFEED_BS2B_LOCK (crossfeed);
     bs2b_clear (crossfeed->bs2bdp);
+    GST_CROSSFEED_BS2B_UNLOCK (crossfeed);
+  }
 
   return GST_BASE_TRANSFORM_CLASS (parent_class)->event (trans, event);
 }
@@ -384,30 +407,47 @@ gst_crossfeed_set_property (GObject * object, guint prop_id,
 
   switch (prop_id) {
     case ARG_ACTIVE:
+      GST_CROSSFEED_LOCK (crossfeed);
       crossfeed->active = g_value_get_boolean (value);
       gst_crossfeed_update_passthrough (crossfeed);
       /* Clear the filter buffer if it gets set inactive, so we have
        * a fresh start when it gets activated again. */
-      if (!crossfeed->active)
+      if (!crossfeed->active) {
+        GST_CROSSFEED_UNLOCK (crossfeed);
+        GST_CROSSFEED_BS2B_LOCK (crossfeed);
         bs2b_clear (crossfeed->bs2bdp);
+        GST_CROSSFEED_BS2B_UNLOCK (crossfeed);
+      } else {
+        GST_CROSSFEED_UNLOCK (crossfeed);
+      }
       break;
     case ARG_FCUT:
+      GST_CROSSFEED_BS2B_LOCK (crossfeed);
       bs2b_set_level_fcut (crossfeed->bs2bdp, g_value_get_int (value));
+      GST_CROSSFEED_BS2B_UNLOCK (crossfeed);
       break;
     case ARG_FEED:
+      GST_CROSSFEED_BS2B_LOCK (crossfeed);
       bs2b_set_level_feed (crossfeed->bs2bdp,
         g_value_get_float (value) * FEED_FACTOR);
+      GST_CROSSFEED_BS2B_UNLOCK (crossfeed);
       break;
     case ARG_PRESET:
       switch (g_value_get_enum (value)) {
         case PRESET_DEFAULT:
+          GST_CROSSFEED_BS2B_LOCK (crossfeed);
           bs2b_set_level (crossfeed->bs2bdp, BS2B_DEFAULT_CLEVEL);
+          GST_CROSSFEED_BS2B_UNLOCK (crossfeed);
           break;
         case PRESET_CMOY:
+          GST_CROSSFEED_BS2B_LOCK (crossfeed);
           bs2b_set_level (crossfeed->bs2bdp, BS2B_CMOY_CLEVEL);
+          GST_CROSSFEED_BS2B_UNLOCK (crossfeed);
           break;
         case PRESET_JMEIER:
+          GST_CROSSFEED_BS2B_LOCK (crossfeed);
           bs2b_set_level (crossfeed->bs2bdp, BS2B_JMEIER_CLEVEL);
+          GST_CROSSFEED_BS2B_UNLOCK (crossfeed);
           break;
         default:
           G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -431,13 +471,18 @@ gst_crossfeed_get_property (GObject * object, guint prop_id, GValue * value,
       g_value_set_boolean (value, crossfeed->active);
       break;
     case ARG_FCUT:
+      GST_CROSSFEED_BS2B_LOCK (crossfeed);
       g_value_set_int (value, bs2b_get_level_fcut (crossfeed->bs2bdp));
+      GST_CROSSFEED_BS2B_UNLOCK (crossfeed);
       break;
     case ARG_FEED:
+      GST_CROSSFEED_BS2B_LOCK (crossfeed);
       g_value_set_float (value,
           bs2b_get_level_feed (crossfeed->bs2bdp) / FEED_FACTOR);
+      GST_CROSSFEED_BS2B_UNLOCK (crossfeed);
       break;
     case ARG_PRESET:
+      GST_CROSSFEED_BS2B_LOCK (crossfeed);
       switch (bs2b_get_level (crossfeed->bs2bdp)) {
         case BS2B_DEFAULT_CLEVEL:
           g_value_set_enum (value, PRESET_DEFAULT);
@@ -452,6 +497,7 @@ gst_crossfeed_get_property (GObject * object, guint prop_id, GValue * value,
           g_value_set_enum (value, PRESET_NONE);
           break;
       }
+      GST_CROSSFEED_BS2B_UNLOCK (crossfeed);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
