@@ -92,28 +92,28 @@ struct _GstCrossfeedClass {
 };
 
 static const GstElementDetails crossfeed_details = GST_ELEMENT_DETAILS (
-  "Crossfeed effect",
-  "Filter/Effect/Audio",
-  "Improve headphone listening of stereo audio records"
-      "using the bs2b library.",
-  "Christoph Reiter <christoph.reiter@gmx.at>");
+    "Crossfeed effect",
+    "Filter/Effect/Audio",
+    "Improve headphone listening of stereo audio records"
+        "using the bs2b library.",
+    "Christoph Reiter <christoph.reiter@gmx.at>");
 
 #define ALLOWED_CAPS \
-  "audio/x-raw-int, " \
-  "rate = (int) [ " \
-      G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE) \
-  " ], " \
-  "channels = (int) { 1, 2 }, " \
-  "endianness = (int) { 1234, 4321 }, " \
-  "width = (int) { 8, 16, 24, 32 }, " \
-  "signed = (boolean) { true, false }; " \
-  "audio/x-raw-float, " \
-  "rate = (int) [ " \
-      G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE) \
-  " ], " \
-  "channels = (int) { 1, 2 }, " \
-  "endianness = (int) { 1234, 4321 }, " \
-  "width = (int) {32, 64} "
+    "audio/x-raw-int, " \
+    "rate = (int) [ " \
+        G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE) \
+    " ], " \
+    "channels = (int) { 1, 2 }, " \
+    "endianness = (int) { 1234, 4321 }, " \
+    "width = (int) { 8, 16, 24, 32 }, " \
+    "signed = (boolean) { true, false }; " \
+    "audio/x-raw-float, " \
+    "rate = (int) [ " \
+        G_STRINGIFY (BS2B_MINSRATE) "," G_STRINGIFY (BS2B_MAXSRATE) \
+    " ], " \
+    "channels = (int) { 1, 2 }, " \
+    "endianness = (int) { 1234, 4321 }, " \
+    "width = (int) {32, 64} "
 
 enum
 {
@@ -143,7 +143,7 @@ static void gst_crossfeed_get_property (GObject * object, guint prop_id,
 static GType gst_crossfeed_preset_get_type (void);
 
 static gboolean gst_crossfeed_setup (GstAudioFilter * self,
-  GstRingBufferSpec * format);
+    GstRingBufferSpec * format);
 
 static void gst_crossfeed_finalize (GObject * object);
 
@@ -168,7 +168,7 @@ gst_crossfeed_base_init (gpointer g_class)
 
   caps = gst_caps_from_string (ALLOWED_CAPS);
   gst_audio_filter_class_add_pad_templates (GST_AUDIO_FILTER_CLASS (g_class),
-    caps);
+      caps);
   gst_caps_unref (caps);
 }
 
@@ -429,7 +429,7 @@ gst_crossfeed_set_property (GObject * object, guint prop_id,
     case ARG_FEED:
       GST_CROSSFEED_BS2B_LOCK (crossfeed);
       bs2b_set_level_feed (crossfeed->bs2bdp,
-        g_value_get_float (value) * FEED_FACTOR);
+          g_value_get_float (value) * FEED_FACTOR);
       GST_CROSSFEED_BS2B_UNLOCK (crossfeed);
       break;
     case ARG_PRESET:
