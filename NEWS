@@ -1,4 +1,4 @@
-0.4
+0.4 (Mon, 29 Aug 2011 19:22:52 +0200)
     * Fix leak
     * Property descriptions, preset -> enum, feed is now dB/10 not dB
     * Clear filter buffer on new segments (after seek, reactivating etc.)
