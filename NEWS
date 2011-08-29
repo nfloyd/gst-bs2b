@@ -1,3 +1,10 @@
+0.4
+    * Fix leak
+    * Property descriptions, preset -> enum, feed is now dB/10 not dB
+    * Clear filter buffer on new segments (after seek, reactivating etc.)
+    * 24 bit and single channel support
+    * Various fixes
+
 0.3 (Sat, 20 Aug 2011 03:19:57 +0200)
 
     * First real release

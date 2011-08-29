@@ -1,24 +1,43 @@
 gst-bs2b
 ========
 
-This uses the bs2b library, created by Boris Mikhaylov
-http://bs2b.sourceforge.net/
+This uses the bs2b library, created by Boris Mikhaylov [1] and is based on
+the GStreamer plugin template [2].
 
 Settings:
 
   fcut: Low-pass filter cut frequency (Hz) - 300..2000
   feed: Feed Level (dB/10) - 10..150 (1..15 dB)
+  active: Specify whether the filter is active - True/False
 
 Presets:
 
-  (0): default - Closest to virtual speaker placement (30°, 3 meter)   [700Hz, 4.5dB]
-  (1): cmoy    - Close to Chu Moy's crossfeeder (popular)              [700Hz, 6.0dB]
-  (2): jmeier  - Close to Jan Meier's CORDA amplifiers (little change) [650Hz, 9.0dB]
-  (3): none    - No preset
+  (0): default
+    Closest to virtual speaker placement (30°, 3 meter)   [700Hz, 4.5dB]
+  (1): cmoy
+    Close to Chu Moy's crossfeeder (popular)              [700Hz, 6.0dB]
+  (2): jmeier
+    Close to Jan Meier's CORDA amplifiers (little change) [650Hz, 9.0dB]
+  (3): none
+    No preset
 
 Example pipeline:
 
- gst-launch -v audiotestsrc ! interleave name=i ! crossfeed ! autoaudiosink audiotestsrc freq=330 ! i.
+  gst-launch -v audiotestsrc ! interleave name=i ! crossfeed ! \
+    autoaudiosink audiotestsrc freq=330 ! i.
+
+[1] http://bs2b.sourceforge.net/
+[2] http://cgit.freedesktop.org/gstreamer/gst-template/
+
+License
+=======
+
+Most of the autotool files are MIT [1] licensed and the plugin code
+is LGPLv2 (or later) [2] licensed.
+See the files for exact licensing information.
+
+[1] COPYING.MIT
+[2] COPYING
 
 Building
 ========
